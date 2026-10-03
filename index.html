@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bình Chọn Đồng Phục Lớp</title>
-    <!-- Tích hợp Firebase SDK bản chuẩn (Tránh lỗi Module khi test) -->
+    <!-- Tích hợp Firebase SDK bản chuẩn -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <style>
@@ -70,7 +70,21 @@
             box-shadow: 0 10px 25px rgba(0,0,0,0.5);
             border: 1px solid #334155; backdrop-filter: blur(10px);
         }
-        .leaderboard h2 { text-align: center; color: #e21b70; margin-bottom: 15px; font-size: 1.5rem;}
+        .leaderboard-header {
+            display: flex; flex-direction: column; align-items: center; gap: 5px; margin-bottom: 15px;
+        }
+        .leaderboard-header h2 { color: #e21b70; font-size: 1.5rem; text-align: center; }
+        .online-status {
+            font-size: 0.9rem; color: #10b981; font-weight: bold;
+            background: rgba(16, 185, 129, 0.1); padding: 5px 12px; border-radius: 20px;
+            display: flex; align-items: center; gap: 5px;
+        }
+        .online-dot {
+            width: 8px; height: 8px; background-color: #10b981; border-radius: 50%;
+            animation: blink 1.5s infinite;
+        }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
         .leaderboard-list {
             display: flex; flex-direction: column; gap: 10px; max-height: 250px; overflow-y: auto;
             padding-right: 5px;
@@ -86,7 +100,6 @@
         .rank-item.top-1 { border-left-color: #fbbf24; background: rgba(251, 191, 36, 0.1); }
         .rank-item.top-2 { border-left-color: #94a3b8; background: rgba(148, 163, 184, 0.1); }
         .rank-item.top-3 { border-left-color: #b45309; background: rgba(180, 83, 9, 0.1); }
-        
         .rank-item span.rank-votes { font-weight: bold; color: #10b981; font-size: 1.1rem; }
 
         /* Lưới Ảnh */
@@ -104,7 +117,7 @@
             box-shadow: 0 5px 15px rgba(0,0,0,0.3); transition: transform 0.3s;
             display: flex; flex-direction: column;
         }
-        .card-img-wrapper { height: 220px; overflow: hidden; cursor: pointer; position: relative; }
+        .card-img-wrapper { height: 220px; overflow: hidden; cursor: pointer; position: relative; background: #334155;}
         @media (min-width: 600px) { .card-img-wrapper { height: 300px; } }
         
         .card-img-wrapper img {
@@ -116,7 +129,7 @@
             background: rgba(0,0,0,0.7); padding: 4px 8px; border-radius: 20px; font-size: 11px;
         }
         
-        .card-info { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+        .card-info { padding: 12px; display: flex; flex-direction: column; gap: 10px; z-index: 2;}
         .vote-count { display: flex; justify-content: space-between; font-weight: bold; font-size: 0.9rem;}
         .vote-count span { color: #e21b70; font-size: 1rem;}
         
@@ -124,6 +137,7 @@
         .btn-vote {
             padding: 10px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;
             transition: all 0.2s; text-transform: uppercase; letter-spacing: 1px; font-size: 0.85rem;
+            position: relative; z-index: 5; /* Đảm bảo nút luôn bấm được */
         }
         .btn-vote.not-voted { background: #e21b70; color: white; }
         .btn-vote.not-voted:hover { background: #be125a; transform: scale(1.02);}
@@ -173,7 +187,13 @@
     <div id="main-content">
         <!-- Bảng xếp hạng -->
         <div class="leaderboard">
-            <h2>🏆 Bảng Xếp Hạng Đồng Phục Lớp</h2>
+            <div class="leaderboard-header">
+                <h2>🏆 Bảng Xếp Hạng Đồng Phục Lớp</h2>
+                <div class="online-status">
+                    <div class="online-dot"></div>
+                    Đang online: <span id="online-count">1</span>
+                </div>
+            </div>
             <div class="leaderboard-list" id="leaderboard-list">
                 <i>Đang tải dữ liệu trực tiếp...</i>
             </div>
@@ -191,8 +211,7 @@
             projectId: "voting-2eb94",
             storageBucket: "voting-2eb94.firebasestorage.app",
             messagingSenderId: "79110219098",
-            appId: "1:79110219098:web:58305bf71d93b8256eff63",
-            measurementId: "G-3PQRTG88CE"
+            appId: "1:79110219098:web:58305bf71d93b8256eff63"
         };
         
         // Khởi tạo Firebase
@@ -213,7 +232,6 @@
             "616759615_1446509583927327_7612854746913547033_n.jpg", "831452102_1113506507701513_4363994675918812921_n.jpg"
         ];
 
-        // Lấy lịch sử vote của thiết bị (chống spam)
         let myVotes = JSON.parse(localStorage.getItem('myVotes_class')) || {};
         let globalVotes = {};
 
@@ -231,13 +249,33 @@
             }, 1500);
         });
 
-        // Khởi tạo
         function initApp() {
             renderGallery();
             setupSnow();
             setupClickParticles();
             setupLightbox();
             listenToFirebase();
+            trackOnlineUsers();
+        }
+
+        // Cập nhật Số người Online Thời gian thực
+        function trackOnlineUsers() {
+            const amOnline = db.ref('.info/connected');
+            // Tạo ID tạm thời ngẫu nhiên cho mỗi máy truy cập
+            const userRef = db.ref('presence/' + Date.now() + Math.floor(Math.random() * 1000));
+
+            amOnline.on('value', (snapshot) => {
+                if (snapshot.val()) {
+                    // Khi tắt web, tự động xóa ID này đi
+                    userRef.onDisconnect().remove();
+                    userRef.set(true);
+                }
+            });
+
+            // Lắng nghe tổng số máy đang online
+            db.ref('presence').on('value', (snapshot) => {
+                document.getElementById('online-count').innerText = snapshot.numChildren() || 1;
+            });
         }
 
         // Tạo khung HTML cho lưới ảnh
@@ -248,9 +286,10 @@
                 const imgId = `img_${index}`;
                 const hasVoted = myVotes[imgId] === true;
                 
-                // Mã SVG hiển thị khi lỗi không tải được ảnh
+                // SVG thay thế an toàn, không chứa lỗi nháy kép
                 const fallbackImg = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9IiMzMzMiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5M4buXaSDhuqNuaDwvdGV4dD48L3N2Zz4=";
                 
+                // Bọc nút Vote tách biệt hoàn toàn để lỗi ảnh cũng không ảnh hưởng
                 gallery.innerHTML += `
                     <div class="card" id="card-${imgId}">
                         <div class="card-img-wrapper" onclick="openLightbox('${img}')">
@@ -258,7 +297,7 @@
                         </div>
                         <div class="card-info">
                             <div class="vote-count">Mẫu số ${index + 1} <span id="count-${imgId}">❤️ 0</span></div>
-                            <button id="btn-${imgId}" class="btn-vote ${hasVoted ? 'voted' : 'not-voted'}" onclick="toggleVote('${imgId}')">
+                            <button type="button" id="btn-${imgId}" class="btn-vote ${hasVoted ? 'voted' : 'not-voted'}" onclick="toggleVote('${imgId}')">
                                 ${hasVoted ? 'Hủy Vote' : 'Bình Chọn'}
                             </button>
                         </div>
@@ -267,34 +306,28 @@
             });
         }
 
-        // Xử lý Logic Vote & Gửi lên Firebase đồng bộ 60 thiết bị
+        // Gửi Vote (Dùng Transaction để 60 máy bấm cùng lúc không bị sót)
         function toggleVote(imgId) {
             const hasVoted = myVotes[imgId] === true;
             const voteRef = db.ref('votes/' + imgId);
 
             if (hasVoted) {
-                // Hủy vote trên máy
                 myVotes[imgId] = false;
-                // Trừ điểm an toàn trên Database (Transaction tránh xung đột)
                 voteRef.transaction((currentVotes) => {
                     return (currentVotes || 0) > 0 ? currentVotes - 1 : 0;
                 });
             } else {
-                // Thêm vote trên máy
                 myVotes[imgId] = true;
-                // Hiệu ứng nổ tim
                 createParticlesAtElement(document.getElementById(`btn-${imgId}`), ['#e21b70', '#ff6b6b']);
-                // Cộng điểm an toàn trên Database
                 voteRef.transaction((currentVotes) => {
                     return (currentVotes || 0) + 1;
                 });
             }
             
-            // Lưu trạng thái vào bộ nhớ đệm
             localStorage.setItem('myVotes_class', JSON.stringify(myVotes));
         }
 
-        // Lắng nghe dữ liệu Online & Cập nhật Giao diện
+        // Lắng nghe dữ liệu Online
         function listenToFirebase() {
             db.ref('votes').on('value', (snapshot) => {
                 globalVotes = snapshot.val() || {};
@@ -302,9 +335,7 @@
             });
         }
 
-        // Làm mới số liệu trên Web
         function updateUI() {
-            // Cập nhật số nút & chữ
             images.forEach((img, index) => {
                 const imgId = `img_${index}`;
                 const btn = document.getElementById(`btn-${imgId}`);
@@ -317,7 +348,6 @@
                 }
             });
 
-            // Sắp xếp lại bảng xếp hạng Top
             const sortedImages = images.map((img, index) => ({
                 id: `img_${index}`,
                 name: `Mẫu số ${index + 1}`,
@@ -329,7 +359,6 @@
             
             let displayCount = 0;
             sortedImages.forEach((item, idx) => {
-                // Chỉ hiển thị Top 10 hoặc những ảnh có lượt vote > 0
                 if(item.votes > 0 || idx < 5) {
                     let rankClass = idx === 0 ? 'top-1' : idx === 1 ? 'top-2' : idx === 2 ? 'top-3' : '';
                     let medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '🔹';
@@ -348,9 +377,7 @@
             }
         }
 
-        // --- HIỆU ỨNG GIAO DIỆN ---
-
-        // 1. Phóng to ảnh (Lightbox)
+        // --- HIỆU ỨNG ---
         function setupLightbox() {
             const lightbox = document.getElementById('lightbox');
             const closeBtn = document.querySelector('.close-btn');
@@ -362,7 +389,6 @@
             document.getElementById('lightbox').classList.add('active');
         }
 
-        // 2. Tuyết rơi màn hình
         function setupSnow() {
             const container = document.getElementById('snow-container');
             for(let i=0; i<30; i++) {
@@ -370,13 +396,12 @@
                 flake.className = 'snowflake';
                 flake.style.left = Math.random() * 100 + 'vw';
                 flake.style.width = flake.style.height = (Math.random() * 5 + 2) + 'px';
-                flake.style.animationDuration = (Math.random() * 3 + 3) + 's'; // 3-6s
+                flake.style.animationDuration = (Math.random() * 3 + 3) + 's';
                 flake.style.animationDelay = Math.random() * 2 + 's';
                 container.appendChild(flake);
             }
         }
 
-        // 3. Click chuột nổ hạt (Particles)
         function setupClickParticles() {
             document.addEventListener('click', (e) => {
                 if(e.target.tagName === 'BUTTON' || e.target.closest('#lightbox')) return; 
@@ -391,10 +416,8 @@
                 p.style.width = p.style.height = (Math.random() * 5 + 3) + 'px';
                 p.style.left = x + 'px';
                 p.style.top = y + 'px';
-                let tx = (Math.random() - 0.5) * 80 + 'px';
-                let ty = (Math.random() - 0.5) * 80 + 'px';
-                p.style.setProperty('--tx', tx);
-                p.style.setProperty('--ty', ty);
+                p.style.setProperty('--tx', (Math.random() - 0.5) * 80 + 'px');
+                p.style.setProperty('--ty', (Math.random() - 0.5) * 80 + 'px');
                 document.body.appendChild(p);
                 setTimeout(() => p.remove(), 600);
             }
