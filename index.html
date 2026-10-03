@@ -4,8 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bình Chọn Đồng Phục Lớp</title>
+    <!-- Tích hợp Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <!-- Tích hợp Thư viện quét thiết bị chống gian lận FingerprintJS -->
+    <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
+    
     <style>
         /* CSS Cơ bản */
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -14,6 +18,7 @@
         /* Splash Screen */
         #splash { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 9999; display: flex; justify-content: center; align-items: center; transition: opacity 1s ease-out; }
         #splash h1 { font-size: 4rem; letter-spacing: 5px; animation: pulse 1.5s infinite; color: #fff;}
+        #splash p { position: absolute; bottom: 30px; color: #e21b70; font-size: 1rem; animation: blink 1.5s infinite;}
         @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 0.8; text-shadow: 0 0 10px #fff; } 50% { transform: scale(1.1); opacity: 1; text-shadow: 0 0 30px #e21b70; } }
 
         /* Popup Chọn Giới Tính & Mua Áo */
@@ -100,8 +105,11 @@
 </head>
 <body>
 
-    <!-- Splash -->
-    <div id="splash"><h1>HELLO</h1></div>
+    <!-- Splash có thêm dòng báo đang quét phần cứng -->
+    <div id="splash">
+        <h1>HELLO</h1>
+        <p>Đang quét phần cứng chống gian lận...</p>
+    </div>
 
     <!-- Chọn Giới Tính -->
     <div id="gender-modal" class="modal-overlay">
@@ -215,23 +223,47 @@
         
         const images = [...new Set([...oldImages, ...newImages])];
 
-        let myVotes = JSON.parse(localStorage.getItem('myVotes_class_v3')) || {};
-        let userGender = localStorage.getItem('userGender');
-        let answeredPurchase = localStorage.getItem('answeredPurchase');
+        // Biến toàn cục mới
+        let deviceId = ""; 
+        let myVotes = {};
+        let userGender = null;
+        let answeredPurchase = false;
         let globalVotes = {};
         let currentTab = 'total';
         let currentLightboxIndex = 0;
 
-        // Vòng lặp khởi động Web
+        // Vòng lặp khởi động Web (Thay LocalStorage bằng Đám mây Firebase qua ID Máy)
         window.addEventListener('load', () => {
-            setTimeout(() => {
-                document.getElementById('splash').style.opacity = '0';
-                setTimeout(() => {
-                    document.getElementById('splash').style.display = 'none';
-                    checkGenderAndStart();
-                }, 800);
-            }, 1500);
+            // Chạy trình quét thông số máy
+            FingerprintJS.load().then(fp => fp.get()).then(result => {
+                deviceId = result.visitorId; // ID mã hóa thiết bị (VD: mở Zalo hay Safari thì ID này vẫn ko đổi)
+                
+                // Kéo dữ liệu quá khứ của thiết bị này từ đám mây về
+                db.ref('users/' + deviceId).once('value', (snapshot) => {
+                    const data = snapshot.val() || {};
+                    userGender = data.gender || null;
+                    answeredPurchase = data.answeredPurchase || false;
+                    myVotes = data.votes || {};
+
+                    setTimeout(() => {
+                        document.getElementById('splash').style.opacity = '0';
+                        setTimeout(() => {
+                            document.getElementById('splash').style.display = 'none';
+                            checkGenderAndStart();
+                        }, 800);
+                    }, 1000);
+                });
+            });
         });
+
+        // Hàm Đồng bộ hóa dữ liệu cá nhân lên mây ngay lập tức
+        function syncUserData() {
+            db.ref('users/' + deviceId).update({
+                gender: userGender,
+                answeredPurchase: answeredPurchase,
+                votes: myVotes
+            });
+        }
 
         // Cửa 1: Kiểm tra giới tính
         function checkGenderAndStart() {
@@ -243,7 +275,7 @@
         }
         function setGender(gender) {
             userGender = gender;
-            localStorage.setItem('userGender', gender);
+            syncUserData();
             document.getElementById('gender-modal').style.display = 'none';
             checkPurchaseAndStart();
         }
@@ -257,7 +289,8 @@
             }
         }
         function acceptPurchase() {
-            localStorage.setItem('answeredPurchase', 'true');
+            answeredPurchase = true;
+            syncUserData();
             document.getElementById('purchase-modal').style.display = 'none';
             startApp();
         }
@@ -268,7 +301,8 @@
                 <h2 style="color:#e21b70; font-size: 1.5rem;">Tại sao lại không nhỉ, câu trả lời sai rồi!</h2>
             `;
             setTimeout(() => {
-                localStorage.setItem('answeredPurchase', 'true');
+                answeredPurchase = true;
+                syncUserData();
                 document.getElementById('purchase-modal').style.display = 'none';
                 startApp();
             }, 3500);
@@ -284,10 +318,10 @@
             trackOnlineUsers();
         }
 
+        // Báo cáo online bằng Vân tay thiết bị (Không lo bị trùng máy nữa)
         function trackOnlineUsers() {
             const amOnline = db.ref('.info/connected');
-            const sessionId = Date.now() + '_' + Math.floor(Math.random() * 10000);
-            const userRef = db.ref('presence/' + sessionId);
+            const userRef = db.ref('presence/' + deviceId); // Dùng ID thật của máy
 
             amOnline.on('value', (snapshot) => {
                 if (snapshot.val() === true) {
@@ -340,7 +374,8 @@
                     createParticlesAtElement(document.getElementById('lightbox-vote-btn'), ['#e21b70', '#ff6b6b']);
                 }
             }
-            localStorage.setItem('myVotes_class_v3', JSON.stringify(myVotes));
+            
+            syncUserData(); // Sao lưu tức thì lên Firebase
             updateGalleryButtons(); 
 
             voteRef.transaction((currentData) => {
@@ -441,11 +476,10 @@
             const btn = document.getElementById('lightbox-vote-btn');
             btn.className = `btn-vote lightbox-btn-vote ${hasVoted ? 'voted' : 'not-voted'}`;
             
-            // Cập nhật text nút kèm số lượng tim
             let showVotes = 0;
             if(globalVotes[imgId]) {
                 if(typeof globalVotes[imgId] === 'number') showVotes = globalVotes[imgId];
-                else showVotes = globalVotes[imgId]['total'] || 0; // Lightbox luôn hiện tổng vote
+                else showVotes = globalVotes[imgId]['total'] || 0; 
             }
             btn.innerText = (hasVoted ? 'Hủy Vote' : 'Bình Chọn') + ` (❤️ ${showVotes})`;
         }
@@ -474,7 +508,7 @@
             }
         }
 
-        // --- HIỆU ỨNG TẠP CHẤT ---
+        // --- HIỆU ỨNG TRANG TRÍ ---
         function setupSnow() {
             const container = document.getElementById('snow-container');
             for(let i=0; i<30; i++) {
