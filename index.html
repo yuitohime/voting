@@ -11,18 +11,36 @@
     <style>
         /* CSS Cơ bản */
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Segoe UI', Tahoma, sans-serif; background-color: #0f172a; color: #fff; overflow-x: hidden; min-height: 100vh; padding-top: 60px; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background-color: #0f172a; color: #fff; overflow-x: hidden; min-height: 100vh; padding-top: 30px; }
 
-        /* Cảnh báo IP đỏ chót */
-        #ip-warning {
-            position: fixed; top: 0; left: 0; width: 100%; background: #dc2626; color: #fff; 
-            z-index: 10005; display: flex; justify-content: center; align-items: center; gap: 15px;
-            padding: 8px 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); border-bottom: 2px solid #991b1b;
+        /* Cảnh báo IP chữ đỏ, nền trong suốt, cuộn góc trái */
+        #ip-warning-container {
+            position: fixed; top: 15px; left: 15px; z-index: 10005;
+            display: flex; align-items: flex-start; gap: 10px;
         }
-        #ip-warning .warning-icon { font-size: 28px; font-weight: bold; animation: blink 1s infinite; }
-        #ip-warning .warning-text { text-align: center; }
-        #ip-warning .warning-text p:first-child { font-size: 0.85rem; text-transform: uppercase; margin-bottom: 3px; font-weight: 600;}
-        #ip-warning .warning-text p:last-child { font-size: 1.2rem; font-weight: 900; letter-spacing: 2px; }
+        #ip-warning-icon {
+            font-size: 30px; cursor: pointer; color: #ef4444;
+            animation: blink 1s infinite;
+            text-shadow: 0 0 10px rgba(0,0,0,0.8); /* Bóng đen nhẹ để nổi bật */
+            user-select: none;
+        }
+        #ip-warning-text {
+            color: #ef4444; /* Màu đỏ */
+            text-align: left;
+            text-shadow: 0 2px 5px rgba(0,0,0,1); /* Đổ bóng đen đậm để chữ không bị chìm vào ảnh */
+            overflow: hidden;
+            white-space: nowrap;
+            max-width: 500px; /* Độ rộng khi mở ra */
+            opacity: 1;
+            transition: max-width 0.6s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.5s ease;
+        }
+        #ip-warning-text.collapsed {
+            max-width: 0;
+            opacity: 0;
+            pointer-events: none;
+        }
+        #ip-warning-text p:first-child { font-size: 0.85rem; text-transform: uppercase; margin-bottom: 3px; font-weight: bold;}
+        #ip-warning-text p:last-child { font-size: 1.2rem; font-weight: 900; letter-spacing: 1px; }
 
         /* Splash Screen */
         #splash { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 9999; display: flex; justify-content: center; align-items: center; transition: opacity 1s ease-out; }
@@ -42,7 +60,7 @@
         .btn-modal.female { background: #ec4899; color: white; }
         .btn-modal:hover { transform: scale(1.05); }
 
-        /* Style riêng cho Box Hỏi Mua Áo */
+        /* Box Hỏi Mua Áo */
         .purchase-options { display: flex; gap: 20px; justify-content: center; }
         .purchase-opt { cursor: pointer; background: #334155; padding: 15px; border-radius: 12px; transition: transform 0.2s, background 0.2s; width: 140px; }
         .purchase-opt:hover { transform: scale(1.05); background: #475569; }
@@ -114,14 +132,13 @@
 </head>
 <body>
 
-    <!-- Cảnh báo cấm BUFF -->
-    <div id="ip-warning">
-        <div class="warning-icon">⚠️</div>
-        <div class="warning-text">
+    <!-- Cảnh báo trong suốt -->
+    <div id="ip-warning-container" style="display: none;">
+        <div id="ip-warning-icon" onclick="showWarning()">⚠️</div>
+        <div id="ip-warning-text">
             <p>Vì chống mấy ông buff vote, mỗi IP mạng chỉ được 1 vote</p>
             <p>CỐ TÌNH BUFF = BAN</p>
         </div>
-        <div class="warning-icon">⚠️</div>
     </div>
 
     <!-- Splash -->
@@ -130,7 +147,7 @@
         <p>Đang kiểm tra kết nối mạng (IP)...</p>
     </div>
 
-    <!-- Chọn Giới Tính -->
+    <!-- Modal Giới tính -->
     <div id="gender-modal" class="modal-overlay">
         <div class="modal-box">
             <h2>Bạn là Nam hay Nữ?</h2>
@@ -142,7 +159,7 @@
         </div>
     </div>
 
-    <!-- Hỏi Mua Áo -->
+    <!-- Modal Mua Áo -->
     <div id="purchase-modal" class="modal-overlay">
         <div class="modal-box" id="purchase-content">
             <h2>Bạn có muốn mua áo không?</h2>
@@ -240,7 +257,6 @@
         ];
         const images = [...new Set([...oldImages, ...newImages])];
 
-        // Biến lưu trữ IP mạng thay cho Fingerprint
         let deviceId = ""; 
         let myVotes = {};
         let userGender = null;
@@ -248,37 +264,55 @@
         let globalVotes = {};
         let currentTab = 'total';
         let currentLightboxIndex = 0;
+        let warningTimeout; // Cài thời gian cho cảnh báo
 
         window.addEventListener('load', () => {
-            // Fetch địa chỉ IP mạng thực tế của người dùng
             fetch('https://api.ipify.org?format=json')
                 .then(response => response.json())
                 .then(data => {
                     let userIP = data.ip;
-                    // Chuyển dấu '.' thành '_' vì Firebase không cho phép lưu key có dấu '.'
                     deviceId = "IP_" + userIP.replace(/\./g, '_').replace(/:/g, '_'); 
                     
-                    db.ref('users/' + deviceId).once('value', (snapshot) => {
+                    // SỬ DỤNG .ON ĐỂ ÉP ĐỒNG BỘ NÚT VOTE CHO TẤT CẢ CÁC MÁY CÙNG WIFI
+                    let isFirstLoad = true;
+                    db.ref('users/' + deviceId).on('value', (snapshot) => {
                         const savedData = snapshot.val() || {};
                         userGender = savedData.gender || null;
                         answeredPurchase = savedData.answeredPurchase || false;
                         myVotes = savedData.votes || {};
 
-                        setTimeout(() => {
-                            document.getElementById('splash').style.opacity = '0';
+                        if (isFirstLoad) {
+                            isFirstLoad = false;
                             setTimeout(() => {
-                                document.getElementById('splash').style.display = 'none';
-                                checkGenderAndStart();
-                            }, 800);
-                        }, 500);
+                                document.getElementById('splash').style.opacity = '0';
+                                setTimeout(() => {
+                                    document.getElementById('splash').style.display = 'none';
+                                    checkGenderAndStart();
+                                }, 800);
+                            }, 500);
+                        } else {
+                            // Cập nhật lại giao diện ngay khi có máy chung mạng bấm vote
+                            if (document.getElementById('main-content').style.display === 'block') {
+                                updateGalleryButtons();
+                            }
+                        }
                     });
                 })
                 .catch(error => {
-                    alert("⚠️ Lỗi mạng! Hãy tắt phần mềm chặn quảng cáo (Adblock) hoặc VPN để hệ thống quét IP.");
+                    alert("⚠️ Lỗi mạng! Hãy tắt VPN để hệ thống quét IP.");
                 });
         });
 
-        // Hàm Đồng bộ hóa
+        // Hiện cảnh báo 7 giây rồi thu gọn lại
+        function showWarning() {
+            const textEl = document.getElementById('ip-warning-text');
+            textEl.classList.remove('collapsed');
+            clearTimeout(warningTimeout);
+            warningTimeout = setTimeout(() => {
+                textEl.classList.add('collapsed');
+            }, 7000);
+        }
+
         function syncUserData() {
             db.ref('users/' + deviceId).update({
                 gender: userGender,
@@ -287,7 +321,6 @@
             });
         }
 
-        // Cửa 1: Giới tính
         function checkGenderAndStart() {
             if (!userGender) {
                 document.getElementById('gender-modal').style.display = 'flex';
@@ -302,7 +335,6 @@
             checkPurchaseAndStart();
         }
 
-        // Cửa 2: Mua áo
         function checkPurchaseAndStart() {
             if (!answeredPurchase) {
                 document.getElementById('purchase-modal').style.display = 'flex';
@@ -332,6 +364,8 @@
 
         function startApp() {
             document.getElementById('main-content').style.display = 'block';
+            document.getElementById('ip-warning-container').style.display = 'flex';
+            showWarning(); // Kích hoạt 7 giây cảnh báo đầu tiên
             renderGallery();
             setupSnow();
             setupClickParticles();
@@ -340,7 +374,6 @@
             trackOnlineUsers();
         }
 
-        // Báo cáo online bằng IP (1 nhà 1 người online)
         function trackOnlineUsers() {
             const amOnline = db.ref('.info/connected');
             const userRef = db.ref('presence/' + deviceId);
