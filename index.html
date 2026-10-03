@@ -7,19 +7,29 @@
     <!-- Tích hợp Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-    <!-- Tích hợp Thư viện quét thiết bị chống gian lận FingerprintJS -->
-    <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
     
     <style>
         /* CSS Cơ bản */
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Segoe UI', Tahoma, sans-serif; background-color: #0f172a; color: #fff; overflow-x: hidden; min-height: 100vh; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background-color: #0f172a; color: #fff; overflow-x: hidden; min-height: 100vh; padding-top: 60px; }
+
+        /* Cảnh báo IP đỏ chót */
+        #ip-warning {
+            position: fixed; top: 0; left: 0; width: 100%; background: #dc2626; color: #fff; 
+            z-index: 10005; display: flex; justify-content: center; align-items: center; gap: 15px;
+            padding: 8px 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); border-bottom: 2px solid #991b1b;
+        }
+        #ip-warning .warning-icon { font-size: 28px; font-weight: bold; animation: blink 1s infinite; }
+        #ip-warning .warning-text { text-align: center; }
+        #ip-warning .warning-text p:first-child { font-size: 0.85rem; text-transform: uppercase; margin-bottom: 3px; font-weight: 600;}
+        #ip-warning .warning-text p:last-child { font-size: 1.2rem; font-weight: 900; letter-spacing: 2px; }
 
         /* Splash Screen */
         #splash { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 9999; display: flex; justify-content: center; align-items: center; transition: opacity 1s ease-out; }
         #splash h1 { font-size: 4rem; letter-spacing: 5px; animation: pulse 1.5s infinite; color: #fff;}
         #splash p { position: absolute; bottom: 30px; color: #e21b70; font-size: 1rem; animation: blink 1.5s infinite;}
         @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 0.8; text-shadow: 0 0 10px #fff; } 50% { transform: scale(1.1); opacity: 1; text-shadow: 0 0 30px #e21b70; } }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
         /* Popup Chọn Giới Tính & Mua Áo */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.9); z-index: 9998; display: none; justify-content: center; align-items: center; flex-direction: column; }
@@ -55,7 +65,6 @@
         .leaderboard-header h2 { color: #fbbf24; font-size: 1.5rem; text-align: center; }
         .online-status { font-size: 0.9rem; color: #10b981; font-weight: bold; background: rgba(16, 185, 129, 0.1); padding: 5px 12px; border-radius: 20px; display: flex; align-items: center; gap: 5px; }
         .online-dot { width: 8px; height: 8px; background-color: #10b981; border-radius: 50%; animation: blink 1.5s infinite; }
-        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
         .lb-tabs { display: flex; justify-content: center; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
         .lb-tab { padding: 8px 15px; background: #334155; color: #cbd5e1; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; transition: all 0.3s; }
@@ -89,7 +98,7 @@
         .btn-vote.not-voted { background: #e21b70; color: white; }
         .btn-vote.voted { background: #475569; color: #94a3b8; }
         
-        /* Lightbox nâng cấp (Có Slider + Nút Vote) */
+        /* Lightbox */
         #lightbox { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.95); z-index: 10000; display: flex; justify-content: space-between; align-items: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; padding: 0 10px; }
         #lightbox.active { opacity: 1; pointer-events: auto; }
         
@@ -105,10 +114,20 @@
 </head>
 <body>
 
-    <!-- Splash có thêm dòng báo đang quét phần cứng -->
+    <!-- Cảnh báo cấm BUFF -->
+    <div id="ip-warning">
+        <div class="warning-icon">⚠️</div>
+        <div class="warning-text">
+            <p>Vì chống mấy ông buff vote, mỗi IP mạng chỉ được 1 vote</p>
+            <p>CỐ TÌNH BUFF = BAN</p>
+        </div>
+        <div class="warning-icon">⚠️</div>
+    </div>
+
+    <!-- Splash -->
     <div id="splash">
         <h1>HELLO</h1>
-        <p>Đang quét phần cứng chống gian lận...</p>
+        <p>Đang kiểm tra kết nối mạng (IP)...</p>
     </div>
 
     <!-- Chọn Giới Tính -->
@@ -143,7 +162,7 @@
 
     <div id="snow-container"></div>
     
-    <!-- Lightbox Nâng Cấp -->
+    <!-- Lightbox -->
     <div id="lightbox" onclick="closeLightbox(event)">
         <div class="close-btn" onclick="closeLightbox(event, true)">&times;</div>
         <div class="nav-btn prev-btn" onclick="prevImage(event)">&#10094;</div>
@@ -191,7 +210,6 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // Gộp mảng ảnh và tự động loại bỏ ảnh trùng lặp
         const oldImages = [
             "456447187_1937659403401121_954613996768826159_n.jpg", "462547721_1167905501562420_3933350056981472846_n.jpg",
             "462650453_2865468186955353_4121467214480437293_n.jpg", "475092831_575404725492781_8898609568350516036_n.jpg",
@@ -220,10 +238,9 @@
             "767716330_28015762941373587_3919864508761576540_n.jpg", "766240921_4605080879721278_3755861352453581210_n.jpg",
             "788665766_2255417051924161_7950686347686944931_n.jpg", "789972490_1247317034187550_9196037904557741985_n.jpg"
         ];
-        
         const images = [...new Set([...oldImages, ...newImages])];
 
-        // Biến toàn cục mới
+        // Biến lưu trữ IP mạng thay cho Fingerprint
         let deviceId = ""; 
         let myVotes = {};
         let userGender = null;
@@ -232,31 +249,36 @@
         let currentTab = 'total';
         let currentLightboxIndex = 0;
 
-        // Vòng lặp khởi động Web (Thay LocalStorage bằng Đám mây Firebase qua ID Máy)
         window.addEventListener('load', () => {
-            // Chạy trình quét thông số máy
-            FingerprintJS.load().then(fp => fp.get()).then(result => {
-                deviceId = result.visitorId; // ID mã hóa thiết bị (VD: mở Zalo hay Safari thì ID này vẫn ko đổi)
-                
-                // Kéo dữ liệu quá khứ của thiết bị này từ đám mây về
-                db.ref('users/' + deviceId).once('value', (snapshot) => {
-                    const data = snapshot.val() || {};
-                    userGender = data.gender || null;
-                    answeredPurchase = data.answeredPurchase || false;
-                    myVotes = data.votes || {};
+            // Fetch địa chỉ IP mạng thực tế của người dùng
+            fetch('https://api.ipify.org?format=json')
+                .then(response => response.json())
+                .then(data => {
+                    let userIP = data.ip;
+                    // Chuyển dấu '.' thành '_' vì Firebase không cho phép lưu key có dấu '.'
+                    deviceId = "IP_" + userIP.replace(/\./g, '_').replace(/:/g, '_'); 
+                    
+                    db.ref('users/' + deviceId).once('value', (snapshot) => {
+                        const savedData = snapshot.val() || {};
+                        userGender = savedData.gender || null;
+                        answeredPurchase = savedData.answeredPurchase || false;
+                        myVotes = savedData.votes || {};
 
-                    setTimeout(() => {
-                        document.getElementById('splash').style.opacity = '0';
                         setTimeout(() => {
-                            document.getElementById('splash').style.display = 'none';
-                            checkGenderAndStart();
-                        }, 800);
-                    }, 1000);
+                            document.getElementById('splash').style.opacity = '0';
+                            setTimeout(() => {
+                                document.getElementById('splash').style.display = 'none';
+                                checkGenderAndStart();
+                            }, 800);
+                        }, 500);
+                    });
+                })
+                .catch(error => {
+                    alert("⚠️ Lỗi mạng! Hãy tắt phần mềm chặn quảng cáo (Adblock) hoặc VPN để hệ thống quét IP.");
                 });
-            });
         });
 
-        // Hàm Đồng bộ hóa dữ liệu cá nhân lên mây ngay lập tức
+        // Hàm Đồng bộ hóa
         function syncUserData() {
             db.ref('users/' + deviceId).update({
                 gender: userGender,
@@ -265,7 +287,7 @@
             });
         }
 
-        // Cửa 1: Kiểm tra giới tính
+        // Cửa 1: Giới tính
         function checkGenderAndStart() {
             if (!userGender) {
                 document.getElementById('gender-modal').style.display = 'flex';
@@ -280,7 +302,7 @@
             checkPurchaseAndStart();
         }
 
-        // Cửa 2: Câu hỏi chốt đơn
+        // Cửa 2: Mua áo
         function checkPurchaseAndStart() {
             if (!answeredPurchase) {
                 document.getElementById('purchase-modal').style.display = 'flex';
@@ -318,10 +340,10 @@
             trackOnlineUsers();
         }
 
-        // Báo cáo online bằng Vân tay thiết bị (Không lo bị trùng máy nữa)
+        // Báo cáo online bằng IP (1 nhà 1 người online)
         function trackOnlineUsers() {
             const amOnline = db.ref('.info/connected');
-            const userRef = db.ref('presence/' + deviceId); // Dùng ID thật của máy
+            const userRef = db.ref('presence/' + deviceId);
 
             amOnline.on('value', (snapshot) => {
                 if (snapshot.val() === true) {
@@ -369,13 +391,12 @@
             } else {
                 myVotes[imgId] = true;
                 createParticlesAtElement(document.getElementById(`btn-${imgId}`), ['#e21b70', '#ff6b6b']);
-                // Nếu đang mở lightbox, tạo hiệu ứng ở nút lightbox luôn
                 if(document.getElementById('lightbox').classList.contains('active')){
                     createParticlesAtElement(document.getElementById('lightbox-vote-btn'), ['#e21b70', '#ff6b6b']);
                 }
             }
             
-            syncUserData(); // Sao lưu tức thì lên Firebase
+            syncUserData(); 
             updateGalleryButtons(); 
 
             voteRef.transaction((currentData) => {
@@ -421,7 +442,7 @@
                     countSpan.innerText = `❤️ ${showVotes}`;
                 }
             });
-            updateLightboxVoteButton(); // Cập nhật nút trong lightbox nếu đang mở
+            updateLightboxVoteButton(); 
         }
 
         function switchTab(tab) {
@@ -458,7 +479,6 @@
             });
         }
 
-        // --- CƠ CHẾ LIGHTBOX & SLIDER CHUYỂN ẢNH ---
         function openLightbox(index) {
             currentLightboxIndex = index;
             renderLightboxContent();
@@ -508,7 +528,6 @@
             }
         }
 
-        // --- HIỆU ỨNG TRANG TRÍ ---
         function setupSnow() {
             const container = document.getElementById('snow-container');
             for(let i=0; i<30; i++) {
@@ -528,6 +547,7 @@
                 createParticles(e.clientX, e.clientY, ['#fff', '#0ea5e9', '#e21b70']);
             });
         }
+
         function createParticles(x, y, colors) {
             for (let i = 0; i < 6; i++) {
                 let p = document.createElement('div');
@@ -542,6 +562,7 @@
                 setTimeout(() => p.remove(), 600);
             }
         }
+
         function createParticlesAtElement(el, colors) {
             if(!el) return;
             const rect = el.getBoundingClientRect();
