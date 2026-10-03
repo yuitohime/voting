@@ -91,7 +91,10 @@
         .leaderboard-list { display: flex; flex-direction: column; gap: 10px; max-height: 250px; overflow-y: auto; padding-right: 5px; }
         .leaderboard-list::-webkit-scrollbar { width: 6px; }
         .leaderboard-list::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; }
-        .rank-item { display: flex; justify-content: space-between; align-items: center; background: #1e293b; padding: 12px 15px; border-radius: 8px; border-left: 4px solid #334155; }
+        
+        /* Hiệu ứng khi bấm vào ảnh Top trong Bảng Xếp Hạng */
+        .rank-item { display: flex; justify-content: space-between; align-items: center; background: #1e293b; padding: 12px 15px; border-radius: 8px; border-left: 4px solid #334155; cursor: pointer; transition: transform 0.2s, background 0.2s; }
+        .rank-item:hover { transform: scale(1.02); background: #334155; border-left-color: #e21b70; }
         .rank-item.top-1 { border-left-color: #fbbf24; background: rgba(251, 191, 36, 0.1); }
         .rank-item.top-2 { border-left-color: #94a3b8; background: rgba(148, 163, 184, 0.1); }
         .rank-item.top-3 { border-left-color: #b45309; background: rgba(180, 83, 9, 0.1); }
@@ -271,12 +274,17 @@
         let currentLightboxIndex = 0;
         let warningTimeout; 
 
-        // Hàm phát âm thanh
+        // Hàm phát âm thanh xử lý lỗi chặt chẽ hơn
         function playSound(id) {
             let sound = document.getElementById(id);
             if(sound) {
                 sound.currentTime = 0;
-                sound.play().catch(e => console.log("Trình duyệt chặn âm thanh tự động"));
+                let playPromise = sound.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(error => {
+                        console.log("Trình duyệt tạm chặn âm thanh, cần tương tác mạnh hơn");
+                    });
+                }
             }
         }
 
@@ -287,7 +295,6 @@
                     let userIP = data.ip;
                     deviceId = "IP_" + userIP.replace(/\./g, '_').replace(/:/g, '_'); 
                     
-                    // Đổi đường dẫn thành users_v4 để Reset trắng toàn bộ
                     let isFirstLoad = true;
                     db.ref('users_v4/' + deviceId).on('value', (snapshot) => {
                         const savedData = snapshot.val() || {};
@@ -355,14 +362,14 @@
             }
         }
         function acceptPurchase() {
-            playSound('sound-accept'); // Tiếng huuuuu
+            playSound('sound-accept'); 
             answeredPurchase = true;
             syncUserData();
             document.getElementById('purchase-modal').style.display = 'none';
             startApp();
         }
         function rejectPurchase() {
-            playSound('sound-reject'); // Tiếng cười
+            playSound('sound-reject'); 
             const content = document.getElementById('purchase-content');
             content.innerHTML = `
                 <img src="bf5699d5355e265de647028a3a54f2b8.jpg" style="max-width:250px; border-radius:15px; margin-bottom:15px; border: 3px solid #e21b70;">
@@ -430,10 +437,9 @@
 
         function toggleVote(imgId) {
             if(!userGender) return;
-            playSound('sound-click'); // Tiếng click
+            playSound('sound-click'); 
             
             const hasVoted = myVotes[imgId] === true;
-            // Đổi đường dẫn thành votes_v4 để Reset trắng toàn bộ
             const voteRef = db.ref('votes_v4/' + imgId); 
 
             if (hasVoted) {
@@ -466,7 +472,6 @@
             });
         }
 
-        // Lắng nghe votes_v4 thay vì votes cũ
         function listenToFirebase() {
             db.ref('votes_v4').on('value', (snapshot) => {
                 globalVotes = snapshot.val() || {};
@@ -512,7 +517,8 @@
                     if(typeof globalVotes[imgId] === 'number') voteCount = (currentTab === 'total') ? globalVotes[imgId] : 0;
                     else voteCount = globalVotes[imgId][currentTab] || 0;
                 }
-                return { id: imgId, name: `Mẫu số ${index + 1}`, votes: voteCount };
+                // Thêm thuộc tính index để truyền vào hàm mở ảnh
+                return { id: imgId, index: index, name: `Mẫu số ${index + 1}`, votes: voteCount };
             }).sort((a, b) => b.votes - a.votes);
 
             const lbList = document.getElementById('leaderboard-list');
@@ -521,8 +527,10 @@
             sortedImages.forEach((item, idx) => {
                 let rankClass = idx === 0 ? 'top-1' : idx === 1 ? 'top-2' : idx === 2 ? 'top-3' : '';
                 let medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '🔹';
+                
+                // Đã chèn thêm sự kiện onclick="openLightbox(...)" để mở ảnh trực tiếp từ Bảng Xếp Hạng
                 lbList.innerHTML += `
-                    <div class="rank-item ${rankClass}">
+                    <div class="rank-item ${rankClass}" onclick="openLightbox(${item.index})" title="Bấm để xem ảnh">
                         <span>${medal} ${item.name}</span>
                         <span class="rank-votes">❤️ ${item.votes}</span>
                     </div>
@@ -531,7 +539,7 @@
         }
 
         function openLightbox(index) {
-            playSound('sound-click'); // Tiếng click khi bấm vào ảnh
+            playSound('sound-click'); 
             currentLightboxIndex = index;
             renderLightboxContent();
             document.getElementById('lightbox').classList.add('active');
