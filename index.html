@@ -4,207 +4,139 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bình Chọn Đồng Phục Lớp</title>
-    <!-- Tích hợp Firebase SDK bản chuẩn -->
+    <!-- Tích hợp Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <style>
-        /* CSS Reset & Cơ bản */
+        /* CSS Cơ bản */
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #0f172a;
-            color: #fff;
-            overflow-x: hidden;
-            min-height: 100vh;
-        }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background-color: #0f172a; color: #fff; overflow-x: hidden; min-height: 100vh; }
 
-        /* Màn hình Splash "Hello" */
-        #splash {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #000; z-index: 9999;
-            display: flex; justify-content: center; align-items: center;
-            transition: opacity 1s ease-out;
-        }
+        /* Splash Screen */
+        #splash { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 9999; display: flex; justify-content: center; align-items: center; transition: opacity 1s ease-out; }
         #splash h1 { font-size: 4rem; letter-spacing: 5px; animation: pulse 1.5s infinite; color: #fff;}
-        @keyframes pulse {
-            0% { transform: scale(1); opacity: 0.8; text-shadow: 0 0 10px #fff; }
-            50% { transform: scale(1.1); opacity: 1; text-shadow: 0 0 30px #e21b70; }
-            100% { transform: scale(1); opacity: 0.8; text-shadow: 0 0 10px #fff; }
-        }
+        @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 0.8; text-shadow: 0 0 10px #fff; } 50% { transform: scale(1.1); opacity: 1; text-shadow: 0 0 30px #e21b70; } }
 
-        /* Hạt Click Chuột */
-        .particle {
-            position: absolute; border-radius: 50%; pointer-events: none;
-            animation: explode 0.6s ease-out forwards;
-            z-index: 9998;
-        }
-        @keyframes explode {
-            0% { transform: scale(1); opacity: 1; }
-            100% { transform: scale(0) translate(var(--tx), var(--ty)); opacity: 0; }
-        }
-
-        /* Hiệu ứng tuyết rơi */
-        #snow-container {
+        /* Popup Chọn Giới Tính */
+        #gender-modal {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none; z-index: 0; overflow: hidden;
+            background: rgba(0, 0, 0, 0.9); z-index: 9998;
+            display: none; justify-content: center; align-items: center; flex-direction: column;
         }
-        .snowflake {
-            position: absolute; top: -10px; background: white; border-radius: 50%;
-            opacity: 0.8; animation: fall linear infinite;
-        }
-        @keyframes fall {
-            to { transform: translateY(100vh); }
-        }
+        .gender-box { background: #1e293b; padding: 30px; border-radius: 15px; text-align: center; border: 2px solid #334155; max-width: 90%; }
+        .gender-box h2 { color: #e21b70; margin-bottom: 10px; }
+        .gender-box p { color: #94a3b8; margin-bottom: 25px; font-size: 0.9rem; }
+        .gender-btns { display: flex; gap: 15px; justify-content: center; }
+        .btn-gender { padding: 15px 30px; font-size: 1.2rem; font-weight: bold; border: none; border-radius: 10px; cursor: pointer; transition: transform 0.2s; }
+        .btn-gender.male { background: #3b82f6; color: white; }
+        .btn-gender.female { background: #ec4899; color: white; }
+        .btn-gender:hover { transform: scale(1.05); }
+
+        /* Hạt Click Chuột & Tuyết */
+        .particle { position: absolute; border-radius: 50%; pointer-events: none; animation: explode 0.6s ease-out forwards; z-index: 9997; }
+        @keyframes explode { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(0) translate(var(--tx), var(--ty)); opacity: 0; } }
+        #snow-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+        .snowflake { position: absolute; top: -10px; background: white; border-radius: 50%; opacity: 0.8; animation: fall linear infinite; }
+        @keyframes fall { to { transform: translateY(100vh); } }
 
         /* Layout Chính */
-        #main-content {
-            position: relative; z-index: 1; padding: 15px;
-            max-width: 1200px; margin: 0 auto; display: none; opacity: 0;
-            transition: opacity 1s ease-in;
-        }
+        #main-content { position: relative; z-index: 1; padding: 15px; max-width: 1200px; margin: 0 auto; display: none; }
 
         /* Bảng xếp hạng */
-        .leaderboard {
-            background: rgba(30, 41, 59, 0.85);
-            border-radius: 15px; padding: 20px; margin-bottom: 30px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-            border: 1px solid #334155; backdrop-filter: blur(10px);
-        }
-        .leaderboard-header {
-            display: flex; flex-direction: column; align-items: center; gap: 5px; margin-bottom: 15px;
-        }
-        .leaderboard-header h2 { color: #e21b70; font-size: 1.5rem; text-align: center; }
-        .online-status {
-            font-size: 0.9rem; color: #10b981; font-weight: bold;
-            background: rgba(16, 185, 129, 0.1); padding: 5px 12px; border-radius: 20px;
-            display: flex; align-items: center; gap: 5px;
-        }
-        .online-dot {
-            width: 8px; height: 8px; background-color: #10b981; border-radius: 50%;
-            animation: blink 1.5s infinite;
-        }
+        .leaderboard { background: rgba(30, 41, 59, 0.85); border-radius: 15px; padding: 20px; margin-bottom: 30px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); border: 1px solid #334155; }
+        .leaderboard-header { display: flex; flex-direction: column; align-items: center; gap: 5px; margin-bottom: 15px; }
+        .leaderboard-header h2 { color: #fbbf24; font-size: 1.5rem; text-align: center; }
+        .online-status { font-size: 0.9rem; color: #10b981; font-weight: bold; background: rgba(16, 185, 129, 0.1); padding: 5px 12px; border-radius: 20px; display: flex; align-items: center; gap: 5px; }
+        .online-dot { width: 8px; height: 8px; background-color: #10b981; border-radius: 50%; animation: blink 1.5s infinite; }
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
-        .leaderboard-list {
-            display: flex; flex-direction: column; gap: 10px; max-height: 250px; overflow-y: auto;
-            padding-right: 5px;
-        }
+        /* Tabs Bảng Xếp Hạng */
+        .lb-tabs { display: flex; justify-content: center; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+        .lb-tab { padding: 8px 15px; background: #334155; color: #cbd5e1; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; transition: all 0.3s; }
+        .lb-tab.active { background: #e21b70; color: white; }
+
+        .leaderboard-list { display: flex; flex-direction: column; gap: 10px; max-height: 250px; overflow-y: auto; padding-right: 5px; }
         .leaderboard-list::-webkit-scrollbar { width: 6px; }
         .leaderboard-list::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; }
-        
-        .rank-item {
-            display: flex; justify-content: space-between; align-items: center;
-            background: #1e293b; padding: 12px 15px; border-radius: 8px;
-            border-left: 4px solid #334155;
-        }
+        .rank-item { display: flex; justify-content: space-between; align-items: center; background: #1e293b; padding: 12px 15px; border-radius: 8px; border-left: 4px solid #334155; }
         .rank-item.top-1 { border-left-color: #fbbf24; background: rgba(251, 191, 36, 0.1); }
         .rank-item.top-2 { border-left-color: #94a3b8; background: rgba(148, 163, 184, 0.1); }
         .rank-item.top-3 { border-left-color: #b45309; background: rgba(180, 83, 9, 0.1); }
-        .rank-item span.rank-votes { font-weight: bold; color: #10b981; font-size: 1.1rem; }
+        .rank-votes { font-weight: bold; color: #10b981; font-size: 1.1rem; }
 
         /* Lưới Ảnh */
-        .gallery {
-            display: grid; 
-            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); 
-            gap: 15px;
-        }
-        @media (min-width: 600px) {
-            .gallery { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px; }
-        }
+        .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 15px; }
+        @media (min-width: 600px) { .gallery { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px; } }
         
-        .card {
-            background: #1e293b; border-radius: 15px; overflow: hidden;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3); transition: transform 0.3s;
-            display: flex; flex-direction: column;
-        }
+        .card { background: #1e293b; border-radius: 15px; overflow: hidden; box-shadow: 0 5px 15px rgba(0,0,0,0.3); display: flex; flex-direction: column; }
         .card-img-wrapper { height: 220px; overflow: hidden; cursor: pointer; position: relative; background: #334155;}
         @media (min-width: 600px) { .card-img-wrapper { height: 300px; } }
-        
-        .card-img-wrapper img {
-            width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s;
-        }
+        .card-img-wrapper img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s; }
         .card-img-wrapper:hover img { transform: scale(1.05); }
-        .card-img-wrapper::after {
-            content: '🔍 Phóng to'; position: absolute; bottom: 8px; right: 8px;
-            background: rgba(0,0,0,0.7); padding: 4px 8px; border-radius: 20px; font-size: 11px;
-        }
+        .card-img-wrapper::after { content: '🔍 Phóng to'; position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,0.7); padding: 4px 8px; border-radius: 20px; font-size: 11px; }
         
         .card-info { padding: 12px; display: flex; flex-direction: column; gap: 10px; z-index: 2;}
         .vote-count { display: flex; justify-content: space-between; font-weight: bold; font-size: 0.9rem;}
         .vote-count span { color: #e21b70; font-size: 1rem;}
         
-        /* Nút Vote/Hủy Vote */
-        .btn-vote {
-            padding: 10px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;
-            transition: all 0.2s; text-transform: uppercase; letter-spacing: 1px; font-size: 0.85rem;
-            position: relative; z-index: 5;
-        }
+        .btn-vote { padding: 10px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: all 0.2s; text-transform: uppercase; font-size: 0.85rem; }
         .btn-vote.not-voted { background: #e21b70; color: white; }
-        .btn-vote.not-voted:hover { background: #be125a; transform: scale(1.02);}
         .btn-vote.voted { background: #475569; color: #94a3b8; }
-        .btn-vote.voted:hover { background: #334155; color: white; }
-
+        
         /* Lightbox */
-        #lightbox {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.95); z-index: 10000;
-            display: flex; justify-content: center; align-items: center;
-            opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
-        }
+        #lightbox { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.95); z-index: 10000; display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
         #lightbox.active { opacity: 1; pointer-events: auto; }
-        #lightbox img {
-            max-width: 95vw; max-height: 90vh; border-radius: 8px; object-fit: contain;
-            transform: scale(0.5) translateY(100px); transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-        }
-        #lightbox.active img { transform: scale(1) translateY(0); }
-        .close-btn {
-            position: absolute; top: 15px; right: 15px; font-size: 35px; color: white;
-            cursor: pointer; background: rgba(255,255,255,0.2); width: 45px; height: 45px;
-            border-radius: 50%; display: flex; justify-content: center; align-items: center;
-            backdrop-filter: blur(5px);
-        }
-        .close-btn:hover { background: rgba(255,255,255,0.4); }
+        #lightbox img { max-width: 95vw; max-height: 90vh; border-radius: 8px; object-fit: contain; transform: scale(0.5); transition: all 0.4s; }
+        #lightbox.active img { transform: scale(1); }
+        .close-btn { position: absolute; top: 15px; right: 15px; font-size: 35px; color: white; cursor: pointer; background: rgba(255,255,255,0.2); width: 45px; height: 45px; border-radius: 50%; display: flex; justify-content: center; align-items: center; }
     </style>
 </head>
 <body>
 
-    <!-- Màn hình chờ Hello -->
-    <div id="splash">
-        <h1>HELLO</h1>
+    <!-- Splash -->
+    <div id="splash"><h1>HELLO</h1></div>
+
+    <!-- Chọn Giới Tính -->
+    <div id="gender-modal">
+        <div class="gender-box">
+            <h2>Bạn là Nam hay Nữ?</h2>
+            <p>Hãy chọn đúng để tính điểm (Mỗi máy chọn 1 lần duy nhất)</p>
+            <div class="gender-btns">
+                <button class="btn-gender male" onclick="setGender('male')">Nam 👦</button>
+                <button class="btn-gender female" onclick="setGender('female')">Nữ 👧</button>
+            </div>
+        </div>
     </div>
 
-    <!-- Hiệu ứng tuyết rơi -->
     <div id="snow-container"></div>
+    <div id="lightbox"><div class="close-btn">&times;</div><img id="lightbox-img" src=""></div>
 
-    <!-- Khung xem ảnh phóng to -->
-    <div id="lightbox">
-        <div class="close-btn">&times;</div>
-        <img id="lightbox-img" src="" alt="Zoomed">
-    </div>
-
-    <!-- Nội dung chính -->
     <div id="main-content">
         <!-- Bảng xếp hạng -->
         <div class="leaderboard">
             <div class="leaderboard-header">
-                <h2>🏆 Bảng Xếp Hạng Đồng Phục Lớp</h2>
+                <h2>🏆 Bảng Xếp Hạng</h2>
                 <div class="online-status">
-                    <div class="online-dot"></div>
-                    Đang online: <span id="online-count">1</span>
+                    <div class="online-dot"></div>Đang online: <span id="online-count">1</span>
                 </div>
             </div>
+            
+            <div class="lb-tabs">
+                <button class="lb-tab active" onclick="switchTab('total')" id="tab-total">Tất cả</button>
+                <button class="lb-tab" onclick="switchTab('male')" id="tab-male">Nam vote</button>
+                <button class="lb-tab" onclick="switchTab('female')" id="tab-female">Nữ vote</button>
+            </div>
+
             <div class="leaderboard-list" id="leaderboard-list">
-                <i>Đang kết nối hệ thống...</i>
+                <!-- Data đổ vào đây -->
             </div>
         </div>
 
-        <!-- Lưới ảnh -->
         <div class="gallery" id="gallery"></div>
     </div>
 
     <script>
-        // CẤU HÌNH FIREBASE - ĐÃ BỔ SUNG databaseURL BỊ THIẾU
+        // CẤU HÌNH FIREBASE - Sử dụng link Database mặc định phòng ngừa lỗi không đồng bộ
         const firebaseConfig = {
             apiKey: "AIzaSyDnnBYVe86pH2LaxobV4cWwQXY-MnPgpTI",
             authDomain: "voting-2eb94.firebaseapp.com",
@@ -215,60 +147,74 @@
             appId: "1:79110219098:web:58305bf71d93b8256eff63"
         };
         
-        // Khởi tạo Firebase
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // Danh sách 20 ảnh
+        // Danh sách 19 ảnh chính xác của bạn
         const images = [
             "456447187_1937659403401121_954613996768826159_n.jpg", "462547721_1167905501562420_3933350056981472846_n.jpg",
             "462650453_2865468186955353_4121467214480437293_n.jpg", "475092831_575404725492781_8898609568350516036_n.jpg",
-            "582653566_723514100772005_1751646020879804812_n.jpg", "552698469_810372851525642_5181685412440161548_n.jpg",
-            "553234198_700291336430216_7222963996084897963_n.jpg", "642759306_1604759967563004_3746023901312674129_n.jpg",
+            "487219176_1108363781051950_7885242427360004707_n.jpg", "542384633_1136038485103373_990602521194201985_n.jpg",
+            "552698469_810372851525642_5181685412440161548_n.jpg", "553234198_700291336430216_7222963996084897963_n.jpg",
+            "582653566_723514100772005_1751646020879804812_n.jpg", "597462480_1081880710909896_1546003193440228884_n.jpg",
+            "608325713_2313279522525174_1553684421790787260_n.jpg", "616759615_1446509583927327_7612854746913547033_n.jpg",
             "622196164_803485386123348_5236810255874376600_n.jpg", "622427587_1207847721471596_6853841438414281016_n.jpg",
-            "608325713_2313279522525174_1553684421790787260_n.jpg", "764975250_3993791987581860_1911950247103884969_n.jpg",
-            "780322483_1459521002207642_4627689339355632345_n.jpg", "597462480_1081880710909896_1546003193440228884_n.jpg",
-            "792806477_1970249763647313_1779523038025011056_n.jpg", "819615723_2207766737289355_6722232517011812916_n.jpg",
-            "542384633_1136038485103373_990602521194201985_n.jpg", "487219176_1108363781051950_7885242427360004707_n.jpg",
-            "616759615_1446509583927327_7612854746913547033_n.jpg", "831452102_1113506507701513_4363994675918812921_n.jpg"
+            "642759306_1604759967563004_3746023901312674129_n.jpg", "764975250_3993791987581860_1911950247103884969_n.jpg",
+            "780322483_1459521002207642_4627689339355632345_n.jpg", "792806477_1970249763647313_1779523038025011056_n.jpg",
+            "819615723_2207766737289355_6722232517011812916_n.jpg"
         ];
 
-        let myVotes = JSON.parse(localStorage.getItem('myVotes_class')) || {};
+        let myVotes = JSON.parse(localStorage.getItem('myVotes_class_v2')) || {};
+        let userGender = localStorage.getItem('userGender');
         let globalVotes = {};
+        let currentTab = 'total'; // total, male, female
 
         window.addEventListener('load', () => {
             setTimeout(() => {
                 document.getElementById('splash').style.opacity = '0';
                 setTimeout(() => {
                     document.getElementById('splash').style.display = 'none';
-                    const main = document.getElementById('main-content');
-                    main.style.display = 'block';
-                    setTimeout(() => main.style.opacity = '1', 50);
-                    initApp();
+                    checkGenderAndStart();
                 }, 800);
             }, 1500);
         });
 
-        function initApp() {
+        function checkGenderAndStart() {
+            if (!userGender) {
+                document.getElementById('gender-modal').style.display = 'flex';
+            } else {
+                startApp();
+            }
+        }
+
+        function setGender(gender) {
+            userGender = gender;
+            localStorage.setItem('userGender', gender);
+            document.getElementById('gender-modal').style.display = 'none';
+            startApp();
+        }
+
+        function startApp() {
+            document.getElementById('main-content').style.display = 'block';
             renderGallery();
             setupSnow();
             setupClickParticles();
             setupLightbox();
+            updateLeaderboard(); // Luôn hiển thị BXH kể cả khi 0 người vote
             listenToFirebase();
             trackOnlineUsers();
         }
 
-        // Cập nhật Số người Online chính xác hơn
+        // Lắng nghe người online
         function trackOnlineUsers() {
             const amOnline = db.ref('.info/connected');
-            // Tạo ID độc lập cho từng tab/thiết bị
             const sessionId = Date.now() + '_' + Math.floor(Math.random() * 10000);
             const userRef = db.ref('presence/' + sessionId);
 
             amOnline.on('value', (snapshot) => {
                 if (snapshot.val() === true) {
-                    userRef.onDisconnect().remove(); // Xóa khi tắt tab
-                    userRef.set(true); // Ghi nhận online
+                    userRef.onDisconnect().remove(); 
+                    userRef.set(true);
                 }
             });
 
@@ -303,42 +249,47 @@
         }
 
         function toggleVote(imgId) {
+            if(!userGender) return alert("Lỗi: Không xác định được giới tính!");
             const hasVoted = myVotes[imgId] === true;
             const voteRef = db.ref('votes/' + imgId);
 
-            // Cập nhật giao diện bấm mượt mà ngay lập tức (Chống đơ)
+            // Xử lý Giao diện ngay lập tức
             if (hasVoted) {
                 myVotes[imgId] = false;
-                globalVotes[imgId] = Math.max(0, (globalVotes[imgId] || 0) - 1);
             } else {
                 myVotes[imgId] = true;
                 createParticlesAtElement(document.getElementById(`btn-${imgId}`), ['#e21b70', '#ff6b6b']);
-                globalVotes[imgId] = (globalVotes[imgId] || 0) + 1;
             }
-            
-            localStorage.setItem('myVotes_class', JSON.stringify(myVotes));
-            updateUI(); // Cập nhật ngay
+            localStorage.setItem('myVotes_class_v2', JSON.stringify(myVotes));
+            updateGalleryButtons(); 
 
-            // Gửi dữ liệu ngầm lên hệ thống
-            if (hasVoted) {
-                voteRef.transaction((currentVotes) => {
-                    return (currentVotes || 0) > 0 ? currentVotes - 1 : 0;
-                }).catch(err => console.error("Lỗi Hủy Vote:", err));
-            } else {
-                voteRef.transaction((currentVotes) => {
-                    return (currentVotes || 0) + 1;
-                }).catch(err => console.error("Lỗi Vote:", err));
-            }
+            // Gửi lên Firebase phân loại 3 mục (Tổng, Nam, Nữ)
+            voteRef.transaction((currentData) => {
+                let data = { male: 0, female: 0, total: 0 };
+                if (currentData) {
+                    if (typeof currentData === 'number') data.total = currentData; // Cập nhật dữ liệu cũ
+                    else data = currentData;
+                }
+                if (hasVoted) {
+                    data[userGender] = Math.max(0, (data[userGender] || 0) - 1);
+                    data.total = Math.max(0, (data.total || 0) - 1);
+                } else {
+                    data[userGender] = (data[userGender] || 0) + 1;
+                    data.total = (data.total || 0) + 1;
+                }
+                return data;
+            });
         }
 
         function listenToFirebase() {
             db.ref('votes').on('value', (snapshot) => {
                 globalVotes = snapshot.val() || {};
-                updateUI();
+                updateGalleryButtons();
+                updateLeaderboard();
             });
         }
 
-        function updateUI() {
+        function updateGalleryButtons() {
             images.forEach((img, index) => {
                 const imgId = `img_${index}`;
                 const btn = document.getElementById(`btn-${imgId}`);
@@ -347,20 +298,41 @@
                     const hasVoted = myVotes[imgId] === true;
                     btn.className = `btn-vote ${hasVoted ? 'voted' : 'not-voted'}`;
                     btn.innerText = hasVoted ? 'Hủy Vote' : 'Bình Chọn';
-                    countSpan.innerText = `❤️ ${globalVotes[imgId] || 0}`;
+                    
+                    // Lấy số liệu theo Tab đang chọn hiển thị lên nút luôn
+                    let showVotes = 0;
+                    if(globalVotes[imgId]) {
+                        if(typeof globalVotes[imgId] === 'number') showVotes = globalVotes[imgId];
+                        else showVotes = globalVotes[imgId][currentTab] || 0;
+                    }
+                    countSpan.innerText = `❤️ ${showVotes}`;
                 }
             });
+        }
 
-            const sortedImages = images.map((img, index) => ({
-                id: `img_${index}`,
-                name: `Mẫu số ${index + 1}`,
-                votes: globalVotes[`img_${index}`] || 0
-            })).sort((a, b) => b.votes - a.votes);
+        // Chuyển Tab BXH
+        function switchTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('.lb-tab').forEach(b => b.classList.remove('active'));
+            document.getElementById(`tab-${tab}`).classList.add('active');
+            updateGalleryButtons();
+            updateLeaderboard();
+        }
+
+        function updateLeaderboard() {
+            const sortedImages = images.map((img, index) => {
+                const imgId = `img_${index}`;
+                let voteCount = 0;
+                if(globalVotes[imgId]) {
+                    if(typeof globalVotes[imgId] === 'number') voteCount = (currentTab === 'total') ? globalVotes[imgId] : 0;
+                    else voteCount = globalVotes[imgId][currentTab] || 0;
+                }
+                return { id: imgId, name: `Mẫu số ${index + 1}`, votes: voteCount };
+            }).sort((a, b) => b.votes - a.votes);
 
             const lbList = document.getElementById('leaderboard-list');
             lbList.innerHTML = '';
             
-            // Hiển thị TOÀN BỘ 20 MẪU trên bảng xếp hạng (Kể cả 0 tim)
             sortedImages.forEach((item, idx) => {
                 let rankClass = idx === 0 ? 'top-1' : idx === 1 ? 'top-2' : idx === 2 ? 'top-3' : '';
                 let medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '🔹';
@@ -400,7 +372,7 @@
 
         function setupClickParticles() {
             document.addEventListener('click', (e) => {
-                if(e.target.tagName === 'BUTTON' || e.target.closest('#lightbox')) return; 
+                if(e.target.tagName === 'BUTTON' || e.target.closest('#lightbox') || e.target.closest('#gender-modal')) return; 
                 createParticles(e.clientX, e.clientY, ['#fff', '#0ea5e9', '#e21b70']);
             });
         }
